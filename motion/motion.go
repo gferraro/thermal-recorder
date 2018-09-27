@@ -6,8 +6,10 @@ import (
 	"github.com/TheCacophonyProject/lepton3"
 )
 
-const NO_DATA = -1
-const TOO_MANY_POINTS_CHANGED = -2
+const NO_DATA = 100
+const TOO_MANY_POINTS_CHANGED = 200
+
+var ZERO_FRAME lepton3.Frame
 
 func NewMotionDetector(args MotionConfig) *motionDetector {
 
@@ -41,12 +43,13 @@ type motionDetector struct {
 	warmerOnly    bool
 }
 
-func (d *motionDetector) Detect(frame *lepton3.Frame) bool {
-	movement, _ := d.pixelsChanged(frame)
+func (d *motionDetector) Detect(frame *lepton3.Frame, outMask *MotionState) bool {
+	movement, _ := d.pixelsChanged(frame, outMask)
 	return movement
 }
 
-func (d *motionDetector) pixelsChanged(frame *lepton3.Frame) (bool, int) {
+func (d *motionDetector) pixelsChanged(frame *lepton3.Frame, outMask *MotionState) (bool, *MotionState) {
+	outMask.Zero()
 
 	processedFrame := d.flooredFrames.Current()
 	d.setFloor(frame, processedFrame)
@@ -65,14 +68,17 @@ func (d *motionDetector) pixelsChanged(frame *lepton3.Frame) (bool, int) {
 
 	if !d.firstDiff {
 		d.firstDiff = true
-		return false, NO_DATA
+		outMask.DetectionState = MotionState_NoData
+		return false, outMask
 	}
 
+	hasMotion := false
 	if d.useOneDiff {
-		return d.hasMotion(diffFrame, nil)
+		hasMotion = d.hasMotion(diffFrame, nil, outMask)
 	} else {
-		return d.hasMotion(diffFrame, prevDiffFrame)
+		hasMotion = d.hasMotion(diffFrame, prevDiffFrame, outMask)
 	}
+	return hasMotion, outMask
 }
 
 func (d *motionDetector) setFloor(f, out *lepton3.Frame) *lepton3.Frame {
@@ -89,7 +95,7 @@ func (d *motionDetector) setFloor(f, out *lepton3.Frame) *lepton3.Frame {
 	return out
 }
 
-func (d *motionDetector) CountPixelsTwoCompare(f1 *lepton3.Frame, f2 *lepton3.Frame) (nonZeros, deltas int) {
+func (d *motionDetector) CountPixelsTwoCompare(f1, f2 *lepton3.Frame, outMask *MotionState) (nonZeros, deltas int) {
 	var nonzeroCount int
 	var deltaCount int
 	for y := 0; y < lepton3.FrameRows; y++ {
@@ -99,6 +105,7 @@ func (d *motionDetector) CountPixelsTwoCompare(f1 *lepton3.Frame, f2 *lepton3.Fr
 			if (v1 > 0) || (v2 > 0) {
 				nonzeroCount++
 				if (v1 > d.deltaThresh) && (v2 > d.deltaThresh) {
+					outMask.Mask[y][x] = true
 					deltaCount++
 				}
 			}
@@ -107,7 +114,7 @@ func (d *motionDetector) CountPixelsTwoCompare(f1 *lepton3.Frame, f2 *lepton3.Fr
 	return nonzeroCount, deltaCount
 }
 
-func (d *motionDetector) CountPixels(f1 *lepton3.Frame) (nonZeros, deltas int) {
+func (d *motionDetector) CountPixels(f1 *lepton3.Frame, outMask *MotionState) (nonZeros, deltas int) {
 	var nonzeroCount int
 	var deltaCount int
 	for y := 0; y < lepton3.FrameRows; y++ {
@@ -116,9 +123,7 @@ func (d *motionDetector) CountPixels(f1 *lepton3.Frame) (nonZeros, deltas int) {
 			if v1 > 0 {
 				nonzeroCount++
 				if v1 > d.deltaThresh {
-					if d.verbose {
-						log.Printf("Motion (%d, %d) = %d", x, y, v1)
-					}
+					outMask.Mask[y][x] = true
 					deltaCount++
 				}
 			}
@@ -127,13 +132,13 @@ func (d *motionDetector) CountPixels(f1 *lepton3.Frame) (nonZeros, deltas int) {
 	return nonzeroCount, deltaCount
 }
 
-func (d *motionDetector) hasMotion(f1 *lepton3.Frame, f2 *lepton3.Frame) (bool, int) {
+func (d *motionDetector) hasMotion(f1, f2 *lepton3.Frame, outMask *MotionState) bool {
 	var nonzeroCount int
 	var deltaCount int
 	if d.useOneDiff {
-		nonzeroCount, deltaCount = d.CountPixels(f1)
+		nonzeroCount, deltaCount = d.CountPixels(f1, outMask)
 	} else {
-		nonzeroCount, deltaCount = d.CountPixelsTwoCompare(f1, f2)
+		nonzeroCount, deltaCount = d.CountPixelsTwoCompare(f1, f2, outMask)
 	}
 
 	// Motion detection is suppressed when over nonzeroLimit motion
@@ -145,13 +150,11 @@ func (d *motionDetector) hasMotion(f1 *lepton3.Frame, f2 *lepton3.Frame) (bool, 
 		log.Printf("Motion detector - too many points changed, probably a recalculation")
 		d.flooredFrames.SetAsOldest()
 		d.firstDiff = false
-		return false, TOO_MANY_POINTS_CHANGED
+		outMask.DetectionState = MotionState_TooManyPoints
+		return false
 	}
 
-	if deltaCount > 0 && d.verbose {
-		log.Printf("deltaCount %d", deltaCount)
-	}
-	return deltaCount >= d.countThresh, deltaCount
+	return deltaCount >= d.countThresh
 }
 
 func absDiffFrames(a, b, out *lepton3.Frame) *lepton3.Frame {

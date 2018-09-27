@@ -48,8 +48,16 @@ func MovingBoxDetections(detector *motionDetector, frames, background, brightSpo
 	results := make([]bool, frames)
 	pixels := make([]int, frames)
 
+	var detectionMask MotionState
+	mask := &detectionMask
+
 	for i := range results {
-		results[i], pixels[i] = detector.pixelsChanged(makeFrame(10+i, background, i*brightSpot))
+		results[i], mask = detector.pixelsChanged(makeFrame(10+i, background, i*brightSpot), &detectionMask)
+		if results[i] {
+			pixels[i] = mask.MaskSize()
+		} else {
+			pixels[i] = int(mask.DetectionState)
+		}
 	}
 	return pixels, results
 }
@@ -59,8 +67,8 @@ func TestRevertsToUsingSmallerFrameIntervalWhenNotEnoughFrames_OneFrame(t *testi
 	config.UseOneDiffOnly = true
 	detector := NewMotionDetector(config)
 
-	pixels, detecteds := MovingBoxDetections(detector, 5, 3300, 100)
-	assert.Equal(t, []int{-1, 9, 9, 9, 18}, pixels)
+	pixels, detecteds := MovingBoxDetections(detector, 5, 3300, MotionState_NoData)
+	assert.Equal(t, []int{MotionState_NoData, 9, 9, 9, 18}, pixels)
 	assert.Equal(t, []bool{false, true, true, true, true}, detecteds)
 }
 
@@ -70,7 +78,7 @@ func TestNoMotionDetectedIfNothingHasChanged(t *testing.T) {
 	detector := NewMotionDetector(config)
 
 	pixels, detecteds := MovingBoxDetections(detector, 5, 3300, 0)
-	assert.Equal(t, []int{-1, 0, 0, 0, 0}, pixels)
+	assert.Equal(t, []int{MotionState_NoData, 0, 0, 0, 0}, pixels)
 	assert.Equal(t, []bool{false, false, false, false, false}, detecteds)
 }
 
@@ -78,8 +86,8 @@ func TestIfUsingTwoFramesItOnlyCountsWhereBothFramesHaveChanged(t *testing.T) {
 	config := defaultMotionParams()
 	detector := NewMotionDetector(config)
 
-	pixels, detecteds := MovingBoxDetections(detector, 6, 3300, 100)
-	assert.Equal(t, []int{-1, 0, 4, 4, 5, 9}, pixels)
+	pixels, detecteds := MovingBoxDetections(detector, 6, 3300, MotionState_NoData)
+	assert.Equal(t, []int{MotionState_NoData, 0, 4, 4, 5, 9}, pixels)
 	assert.Equal(t, []bool{false, false, false, false, false, true}, detecteds)
 }
 
@@ -88,8 +96,8 @@ func TestChangeCountThresh(t *testing.T) {
 	config.CountThresh = 4
 	detector := NewMotionDetector(config)
 
-	pixels, detecteds := MovingBoxDetections(detector, 6, 3300, 100)
-	assert.Equal(t, []int{-1, 0, 4, 4, 5, 9}, pixels)
+	pixels, detecteds := MovingBoxDetections(detector, 6, 3300, MotionState_NoData)
+	assert.Equal(t, []int{MotionState_NoData, 0, 4, 4, 5, 9}, pixels)
 	assert.Equal(t, []bool{false, false, true, true, true, true}, detecteds)
 }
 
@@ -98,11 +106,11 @@ func TestSomethingMovingWhileRecalculation_TwoPoints(t *testing.T) {
 	config.CountThresh = 4
 	detector := NewMotionDetector(config)
 
-	pixels, detecteds := MovingBoxDetections(detector, 6, 3300, 100)
-	assert.Equal(t, []int{-1, 0, 4, 4, 5, 9}, pixels)
+	pixels, detecteds := MovingBoxDetections(detector, 6, 3300, MotionState_NoData)
+	assert.Equal(t, []int{MotionState_NoData, 0, 4, 4, 5, 9}, pixels)
 
-	pixels, detecteds = MovingBoxDetections(detector, 6, 3800, 100)
-	assert.Equal(t, []int{-2, -1, 4, 4, 5, 9}, pixels)
+	pixels, detecteds = MovingBoxDetections(detector, 6, 3800, MotionState_NoData)
+	assert.Equal(t, []int{MotionState_TooManyPoints, MotionState_NoData, 4, 4, 5, 9}, pixels)
 	assert.Equal(t, []bool{false, false, true, true, true, true}, detecteds)
 }
 
@@ -112,10 +120,10 @@ func TestIfRecalculationNothingMoving_TwoPoints(t *testing.T) {
 
 	// fill buffer
 	pixels, detecteds := MovingBoxDetections(detector, 5, 3300, 0)
-	assert.Equal(t, []int{-1, 0, 0, 0, 0}, pixels)
+	assert.Equal(t, []int{MotionState_NoData, 0, 0, 0, 0}, pixels)
 
 	// recalibration
 	pixels, detecteds = MovingBoxDetections(detector, 5, 3800, 0)
-	assert.Equal(t, []int{-2, -1, 0, 0, 0}, pixels)
+	assert.Equal(t, []int{MotionState_TooManyPoints, MotionState_NoData, 0, 0, 0}, pixels)
 	assert.Equal(t, []bool{false, false, false, false, false}, detecteds)
 }

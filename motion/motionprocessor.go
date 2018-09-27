@@ -44,6 +44,7 @@ type MotionProcessor struct {
 	triggerFrames  int
 	triggered      int
 	recorder       recorder.Recorder
+	detectionMask  MotionState
 }
 
 type RecordingListener interface {
@@ -62,7 +63,7 @@ func (mp *MotionProcessor) Process(rawFrame *lepton3.RawFrame) {
 func (mp *MotionProcessor) internalProcess(frame *lepton3.Frame) {
 	mp.totalFrames++
 
-	if mp.motionDetector.Detect(frame) {
+	if mp.motionDetector.Detect(frame, &mp.detectionMask) {
 		if mp.listener != nil {
 			mp.listener.MotionDetected()
 		}
