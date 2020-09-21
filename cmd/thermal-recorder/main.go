@@ -90,7 +90,7 @@ func runMain() error {
 	if args.TestCptvFile != "" {
 		conf.Motion.Verbose = args.Verbose
 		results := NewCPTVPlaybackTester(conf).Detect(args.TestCptvFile)
-		log.Printf("Detected: %-16s Recorded: %-16s Motion frames: %d/%d", results.motionDetectedFrames, results.recordedFrames, results.motionDetectedCount, results.frameCount)
+		log.Printf("%v Detected: %-16s Recorded: %-16s Motion frames: %d/%d", args.TestCptvFile, results.motionDetectedFrames, results.recordedFrames, results.motionDetectedCount, results.frameCount)
 		return nil
 	}
 

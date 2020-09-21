@@ -158,11 +158,24 @@ func (cpt *CPTVPlaybackTester) Detect(filename string) *EventLoggingRecordingLis
 	}
 	defer file.Close()
 
+	frame := reader.EmptyFrame()
+	for {
+		if err := reader.ReadFrame(frame); err != nil {
+			break
+		} else {
+			processor.Preset(frame)
+		}
+	}
+	log.Printf("With preset tempthresh is %v", processor.TempThresh())
+
+	file.Close()
+	file, reader, err = motionTesterLoadFile(filename)
+
 	log.Printf("Device name: %v", reader.DeviceName())
 	log.Printf("Timestamp: %v", reader.Timestamp())
 
 	fakeTime := time.Minute
-	frame := reader.EmptyFrame()
+	frame = reader.EmptyFrame()
 	for {
 		if err := reader.ReadFrame(frame); err != nil {
 			if verbose {

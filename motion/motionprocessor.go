@@ -86,6 +86,13 @@ type RecordingListener interface {
 	RecordingEnded()
 }
 
+func (mp *MotionProcessor) TempThresh() uint16 {
+	return mp.motionDetector.tempThresh
+}
+func (mp *MotionProcessor) Preset(frame *cptvframe.Frame) {
+	mp.motionDetector.PreSet(frame)
+}
+
 func (mp *MotionProcessor) Process(rawFrame []byte) error {
 	frame := mp.frameLoop.Current()
 	if err := mp.parseFrame(rawFrame, frame); err != nil {

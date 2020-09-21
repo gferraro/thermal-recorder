@@ -18,7 +18,6 @@ package motion
 
 import (
 	"log"
-	"math"
 	"time"
 
 	config "github.com/TheCacophonyProject/go-config"
@@ -88,7 +87,22 @@ type motionDetector struct {
 }
 
 func (d *motionDetector) calculateThreshold(backAverage float64) {
-	d.tempThresh = uint16(math.Min(backAverage, float64(d.defaultTempThresh)))
+	d.tempThresh = uint16(backAverage)
+}
+func (d *motionDetector) PreSet(frame *cptvframe.Frame) {
+	prevFFC := d.affectedByFCC
+
+	if d.dynamicThresh && !d.affectedByFCC {
+		backAverage, changed := d.updateBackground(frame, prevFFC)
+		if changed && d.backgroundFrames > d.previewFrames {
+			d.calculateThreshold(backAverage)
+			d.backgroundWeight = frameBackgroundWeighting
+		} else {
+			if d.count%weightEveryNFrames == 0 {
+				d.backgroundWeight = d.backgroundWeight * frameBackgroundWeighting
+			}
+		}
+	}
 }
 
 func (d *motionDetector) Detect(frame *cptvframe.Frame) bool {
